@@ -1,0 +1,118 @@
+﻿<#@ template debug="true" hostSpecific="true" language="C#" #>
+<#@ output extension=".ts" #>
+
+<#@ Assembly Name="System.Core.dll" #>
+// add referenced assemblies here, like:
+// <#@ assembly name="$(TargetDir)TargetAssembly.dll" #>
+
+<#@ import namespace="System" #>
+<#@ import namespace="System.Reflection" #>
+<#@ import namespace="System.Collections.Generic" #>
+<#@ import namespace="System.Text" #>
+<#@ import namespace="System.Linq" #>
+
+<# StartFile("my-awesome-interfaces.d.ts"); #>
+// Add the classes, that should be exported here
+// <# Interface<Namespace.ClassName>(); #>
+// <# Enums<Namespace.EnumName>(); #>
+<# FlushFile(); #>
+
+<#+ 
+
+	const string BasePath = ""; // specify a path here, if your generates files should be created somewhere else
+    List<Type> knownTypes = new List<Type>();
+	string currentFile = null;
+	StringBuilder fileBuilder;
+
+    void Interface<T>()
+    {
+        Type t = typeof(T);     
+		fileBuilder.AppendFormat("declare module {0} {{\r\n", t.Namespace);
+        fileBuilder.AppendFormat("  interface I{0} {{\r\n", t.Name);
+        foreach (var mi in GetInterfaceMembers(t))
+        { 
+            fileBuilder.AppendFormat("    {0}: {1};\r\n", this.ToCamelCase(mi.Name), GetTypeName(mi));
+        }
+        fileBuilder.AppendLine("  }");
+		fileBuilder.AppendLine("}"); 
+        knownTypes.Add(t);
+    }
+
+    IEnumerable<MemberInfo> GetInterfaceMembers(Type type)
+    {
+        return type.GetMembers(BindingFlags.Public | BindingFlags.Instance)
+            .Where(mi => mi.MemberType == MemberTypes.Field || mi.MemberType == MemberTypes.Property);
+    }
+
+    string ToCamelCase(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        if (s.Length < 2) return s.ToLowerInvariant();
+        return char.ToLowerInvariant(s[0]) + s.Substring(1);
+    }
+
+    string GetTypeName(MemberInfo mi)
+    {
+        Type t = (mi is PropertyInfo) ? ((PropertyInfo)mi).PropertyType : ((FieldInfo)mi).FieldType;
+        return this.GetTypeName(t);
+    }
+
+    string GetTypeName(Type t)
+    {
+        if(t.IsPrimitive)
+        {
+            if (t == typeof(bool)) return "boolean";
+            if (t == typeof(char)) return "string";
+            return "number";
+        }
+		if (t == typeof(System.DateTime)) return "Date";
+		if (t == typeof(System.Guid)) return "string";
+		if (t == typeof(System.TimeSpan)) return "string";
+        if (t == typeof(decimal)) return "number";           
+        if (t == typeof(string)) return "string";
+        if (t.IsArray)
+        {            
+            var at = t.GetElementType();
+            return this.GetTypeName(at) + "[]";
+        }
+        if(typeof (System.Collections.IEnumerable).IsAssignableFrom(t)) 
+        {
+            var collectionType = t.GetGenericArguments()[0];
+            return GetTypeName(collectionType) + "[]";
+        }            
+        if (Nullable.GetUnderlyingType(t) != null)
+        {
+            return this.GetTypeName(Nullable.GetUnderlyingType(t));
+        }
+        if(t.IsEnum) return "number";
+        if(knownTypes.Contains(t)) return t.Name;
+        return "any";
+    }
+
+    void Enums<T>()
+    {
+        Type t = typeof(T);        
+        int[] values = (int[])Enum.GetValues(t);
+		fileBuilder.AppendFormat("declare module {0} {{\r\n", t.Namespace);
+        fileBuilder.AppendFormat("  export const enum {0} {{\r\n", t.Name);
+        foreach(var val in values) 
+        {
+            var name = Enum.GetName(typeof(T), val);
+            fileBuilder.AppendFormat("    {0} = {1},\r\n", name, val);
+        }
+
+		fileBuilder.AppendLine("  }");
+        fileBuilder.AppendLine("}");
+    }
+
+	void StartFile(string filename) 
+    {
+		currentFile = filename;
+		fileBuilder = new StringBuilder();
+	}
+
+	void FlushFile()
+    {
+		System.IO.File.WriteAllText(Host.ResolvePath(System.IO.Path.Combine(BasePath, currentFile)), fileBuilder.ToString());
+    }
+#>
