@@ -13,11 +13,11 @@ IDictionary<Type, string> knownTypes = new Dictionary<Type, string>();
 string currentFile = null;
 StringBuilder fileBuilder;
 
-StartFile(""my-awesome-interfaces.d.ts");
+StartFile("my-awesome-interfaces.d.ts");
 
 // Add the classes, that should be exported here
-// <# Interface<Namespace.ClassName>(); #>
-// <# Enums<Namespace.EnumName>(); #>
+// Interface<Namespace.ClassName>();
+// Enums<Namespace.EnumName>();
 
 FlushFile();
 
